@@ -575,7 +575,7 @@ void dummyProcessPacket(const struct pfring_pkthdr *h,
 
   if (unlikely(check_seq_ip)) {
     const struct pkt_parsing_info *hdr = &h->extended_hdr.parsed_pkt;
-    if(!h->ts.tv_sec) pfring_parse_pkt((u_char *) p, (struct pfring_pkthdr *) h, 4, 0, 1);
+    if(!h->ts.tv_sec) pfring_parse_pkt((u_char *) p, (struct pfring_pkthdr *) h, 4, 0, 1);// 包解析，解析到4层，不加时间戳，加hash
     if (hdr->offset.l4_offset && hdr->ip_version == 4) {
       if (last_ip && last_ip+1 != hdr->ip_src.v4)
         printf("Bad IP [expected %u][received %u]\n", last_ip + 1, hdr->ip_src.v4);
@@ -606,7 +606,7 @@ void dummyProcessPacket(const struct pfring_pkthdr *h,
       drop_packet_rule(h);
   }
 
-  if (dumper) {
+  if (dumper) {       // pcap 存包
     if(unlikely(do_close_dump)) openDump();
     if (dumper) {
       if (!h->ts.tv_sec) gettimeofday(&((struct pfring_pkthdr *) h)->ts, NULL);
@@ -616,7 +616,7 @@ void dummyProcessPacket(const struct pfring_pkthdr *h,
   }
 
   if(unlikely(verbose || dump_match)) {
-    print_packet(h, p, dump_match);
+    print_packet(h, p, dump_match);     // 输出packet 的详细信息
   }
 
   if (unlikely(num_packets && num_packets == stats->numPkts[threadId]))
@@ -729,9 +729,9 @@ void printHelp(void) {
 
 /* *************************************** */
 
-void* packet_consumer_thread(void* _id) {
+void* packet_consumer_thread(void* _id) { // 多线程收包，线程函数
   long thread_id = (long)_id;
-  u_int numCPU = sysconf( _SC_NPROCESSORS_ONLN );
+  u_int numCPU = sysconf( _SC_NPROCESSORS_ONLN );   // 获取CPU核心数量
   u_char buffer[NO_ZC_BUFFER_LEN];
   u_char *buffer_p = buffer;
 
@@ -741,7 +741,7 @@ void* packet_consumer_thread(void* _id) {
   /* printf("packet_consumer_thread(%lu)\n", thread_id); */
 
   if((num_threads > 1) && (numCPU > 1)) {
-    if(bind2core(core_id) == 0)
+    if(bind2core(core_id) == 0)                     // 线程绑核
       if (!quiet)
         printf("Set thread %lu on core %lu/%u\n", thread_id, core_id, numCPU);
   }
@@ -756,7 +756,7 @@ void* packet_consumer_thread(void* _id) {
 
     if((rc = pfring_recv(pd, &buffer_p, NO_ZC_BUFFER_LEN, &hdr, wait_for_packet)) > 0) {
       if(stats->do_shutdown) break;
-      dummyProcessPacket(&hdr, buffer, (u_char*)thread_id);
+      dummyProcessPacket(&hdr, buffer, (u_char*)thread_id);  // 模仿 包处理过程
 #ifdef TEST_SEND
       buffer[0] = 0x99;
       buffer[1] = 0x98;
@@ -764,7 +764,7 @@ void* packet_consumer_thread(void* _id) {
       pfring_send(pd, buffer, hdr.caplen);
 #endif
     } else {
-      if(wait_for_packet == 0) sched_yield();
+      if(wait_for_packet == 0) sched_yield(); // 如果无需等待pcaket到来，让出当前线程的CPU占有权，然后把线程放到静态优先队列的尾端，然后一个新的线程会占用CPU
     }
 
     if(0) {
@@ -905,7 +905,7 @@ void openDump() {
     match_dumper = NULL;
   }
 
-  dumper = pcap_dump_open(pcap_open_dead(DLT_EN10MB, 16384 /* MTU */), path);
+  dumper = pcap_dump_open(pcap_open_dead(DLT_EN10MB, 16384 /* MTU */), path); // pcap 存包
 
   if(dumper == NULL)
     fprintf(stderr, "Unable to create dump file %s\n", path);
@@ -968,7 +968,7 @@ int main(int argc, char* argv[]) {
       exit(0);
       break;
     case 'a':
-      wait_for_packet = 0;
+      wait_for_packet = 0; // Active packet wait 激活包等待
       break;
     case 'b':
       cpu_percentage = atoi(optarg);
@@ -980,7 +980,7 @@ int main(int argc, char* argv[]) {
       chunk_mode = atoi(optarg);
       break;
     case 'd':
-      reflector_device = strdup(optarg);
+      reflector_device = strdup(optarg); // reflector，将从网卡收上来的包发到另一个网络接口
       break;
     case 'e':
       switch(atoi(optarg)) {
@@ -1120,7 +1120,7 @@ int main(int argc, char* argv[]) {
   if(num_threads > MAX_NUM_THREADS) num_threads = MAX_NUM_THREADS;
   if(chunk_mode) num_threads = 1;
 
-  bind2node(bind_core);
+  bind2node(bind_core); // 绑核
 
   if ((stats = calloc(1, sizeof(struct app_stats))) == NULL)
     return -1;
@@ -1138,7 +1138,7 @@ int main(int argc, char* argv[]) {
   }
 
   if(out_pcap_file) {
-    openDump();
+    openDump();             // pcap 存包
 
     if(dumper == NULL) return(-1);
 
@@ -1163,7 +1163,7 @@ int main(int argc, char* argv[]) {
   /* flags |= PF_RING_FLOW_OFFLOAD | PF_RING_FLOW_OFFLOAD_NOUPDATES;  to receive FlowID on supported adapters*/
   /* flags |= PF_RING_USERSPACE_BPF; to force userspace BPF even with kernel capture  */
 
-  pd = pfring_open(device, snaplen, flags);
+  pd = pfring_open(device, snaplen, flags);  // 步骤 一 
 
   if(pd == NULL) {
     fprintf(stderr, "pfring_open error [%s] (pf_ring not loaded or interface %s is down ?)\n",
@@ -1172,7 +1172,7 @@ int main(int argc, char* argv[]) {
   } else {
     u_int32_t version;
 
-    pfring_set_application_name(pd, "pfcount");
+    pfring_set_application_name(pd, "pfcount");  // 步骤 二 
     pfring_version(pd, &version);
 
     if (!quiet)
@@ -1208,21 +1208,22 @@ int main(int argc, char* argv[]) {
       fprintf(stderr, "Error setting device clock\n");
   }
 
-  if((rc = pfring_set_direction(pd, direction)) != 0)
+  if((rc = pfring_set_direction(pd, direction)) != 0) // 只考虑符合指定方向的数据包，默认双方向
     ; //fprintf(stderr, "pfring_set_direction returned %d (perhaps you use a direction other than rx only with ZC?)\n", rc);
 
-  if((rc = pfring_set_socket_mode(pd, recv_only_mode)) != 0)
+  if((rc = pfring_set_socket_mode(pd, recv_only_mode)) != 0) // 告诉PF_RING应用程序是否需要从socket上发送或者接收数据包
     fprintf(stderr, "pfring_set_socket_mode returned [rc=%d]\n", rc);
 
   if(bpfFilter != NULL) {
-    rc = pfring_set_bpf_filter(pd, bpfFilter);
+    rc = pfring_set_bpf_filter(pd, bpfFilter);  // bpf 过滤
     if(rc != 0)
       fprintf(stderr, "pfring_set_bpf_filter(%s) returned %d\n", bpfFilter, rc);
     else if (!quiet)
       printf("Successfully set BPF filter '%s'\n", bpfFilter);
   }
 
-  if(clusterId > 0) {
+  if(clusterId > 0) { // 该调用允许一个 ring添加到 Cluster ，它可以交换地址空间。当二个上的socket 被 Cluster 时, 它们共享以per-flow方式平衡的报文输入
+  // 适用多核多线程
     rc = pfring_set_cluster(pd, clusterId, cluster_hash_type);
     fprintf(stderr, "pfring_set_cluster returned %d\n", rc);
   }
@@ -1268,8 +1269,8 @@ int main(int argc, char* argv[]) {
 
   sample_filtering_rules();
 
-  if(num_threads <= 1) {
-    if(bind_core >= 0)
+  if(num_threads <= 1) {      // 单线程收包
+    if(bind_core >= 0)        // 绑核
       bind2core(bind_core);
 
     if (chunk_mode == 1) {
@@ -1277,7 +1278,7 @@ int main(int argc, char* argv[]) {
     } else {
       pfring_loop(pd, dummyProcessPacket, (u_char*)NULL, wait_for_packet);
     }
-  } else {
+  } else {                    // 多线程收包
     pthread_t my_thread;
     long i;
 

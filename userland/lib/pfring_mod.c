@@ -585,7 +585,7 @@ int pfring_mod_recv(pfring *ring, u_char** buffer, u_int buffer_len,
     if(unlikely(ring->reentrant)) pfring_rwlock_unlock(&ring->rx_lock);
 
     if(wait_for_incoming_packet) {
-      rc = pfring_poll(ring, ring->poll_duration);
+      rc = pfring_poll(ring, ring->poll_duration); // poll 机制，从底层读包到用户空间
 
       if((rc == -1) && (errno != EINTR))
 	return(-1);

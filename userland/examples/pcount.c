@@ -248,7 +248,7 @@ char* proto2str(u_short proto) {
 /* ****************************************************** */
 
 static int32_t thiszone;
-
+// 包处理回调函数
 void dummyProcesssPacket(u_char *_deviceId,
 			 const struct pcap_pkthdr *h,
 			 const u_char *p) {
@@ -297,8 +297,8 @@ void dummyProcesssPacket(u_char *_deviceId,
     printf("[caplen=%u][len=%u]\n", h->caplen, h->len);
   }
 
-  if(numPkts == 0) gettimeofday(&startTime, NULL);
-  numPkts++, numBytes += h->len;
+  if(numPkts == 0) gettimeofday(&startTime, NULL); // 计时
+  numPkts++, numBytes += h->len;                  // 计数
 
   if(verbose == 2) {
       int i;
@@ -396,7 +396,7 @@ int main(int argc, char* argv[]) {
       snaplen = atoi(optarg);
       break;
     case 'v':
-      verbose = atoi(optarg);
+      verbose = atoi(optarg); // ./pcount -i em1 -v 2
       break;
     case 'f':
       bpfFilter = strdup(optarg);
@@ -420,39 +420,39 @@ int main(int argc, char* argv[]) {
 
   /* hardcode: promisc=1, to_ms=500 */
   promisc = 1;
-  if((pd = pcap_open_live(device, snaplen,
+  if((pd = pcap_open_live(device, snaplen,              /*步骤1 ，启动在线抓包接口*/
 			  promisc, 500, errbuf)) == NULL) {
     printf("pcap_open_live: %s\n", errbuf);
     return(-1);
   }
 
   if(bpfFilter != NULL) {
-    if(pcap_compile(pd, &fcode, bpfFilter, 1, 0xFFFFFF00) < 0) {
+    if(pcap_compile(pd, &fcode, bpfFilter, 1, 0xFFFFFF00) < 0) { /*步骤2.1 ，设置bpf过滤器*/
       printf("pcap_compile error: '%s'\n", pcap_geterr(pd));
     } else {
-      if(pcap_setfilter(pd, &fcode) < 0) {
+      if(pcap_setfilter(pd, &fcode) < 0) {                       /*步骤2.2 ，设置bpf过滤器*/
 	printf("pcap_setfilter error: '%s'\n", pcap_geterr(pd));
       }
     }
   }
 
-  pcap_set_application_name(pd, "pcount");
+  pcap_set_application_name(pd, "pcount");               /* 设置进程名 */
 
   signal(SIGINT, sigproc);
   signal(SIGTERM, sigproc);
 
   if(!verbose) {
-    signal(SIGALRM, my_sigalarm);
+    signal(SIGALRM, my_sigalarm);  /* 定时输出统计信息 */
     alarm(ALARM_SLEEP);
   }
 
-  pcap_set_watermark(pd, 128);
+  pcap_set_watermark(pd, 128);  /*设置为 每收到128个包 poll 返回一次*/
+/*参考man 手册，-1或0:收包个数不限制，dummyProcesssPacket:回调函数，NULL：dummyProcesssPacket的首参, https://baike.baidu.com/item/pcap_loop*/
+  pcap_loop(pd, -1, dummyProcesssPacket, NULL);   /*步骤3 ，进入工作函数，循环捕获 */
 
-  pcap_loop(pd, -1, dummyProcesssPacket, NULL);
+  print_stats();    /* 结束前输出统计信息 */
 
-  print_stats();
-
-  pcap_close(pd);
+  pcap_close(pd);  /*步骤4 ，关闭捕获器 */
 
   return(0);
 }

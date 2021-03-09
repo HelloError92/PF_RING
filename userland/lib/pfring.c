@@ -472,7 +472,7 @@ void pfring_config(u_short cpu_percentage) {
 
     pfring_initialized = 1;
     schedparam.sched_priority = cpu_percentage;
-    if(sched_setscheduler(0, SCHED_FIFO, &schedparam) == -1) {
+    if(sched_setscheduler(0, SCHED_FIFO, &schedparam) == -1) {  // 设置当前进程的调度策略为schedparam。If pid equals zero, the scheduling policy and parameters of the calling process will be set
       printf("error while setting the scheduler, errno=%i\n", errno);
       exit(1);
     }
@@ -577,10 +577,10 @@ int pfring_stats(pfring *ring, pfring_stat *stats) {
 }
 
 /* **************************************************** */
-
-int pfring_recv(pfring *ring, u_char** buffer, u_int buffer_len,
+// This call returns an incoming packet when available. 
+int pfring_recv(pfring *ring, u_char** buffer, u_int buffer_len, // buffer：where the incoming packet will be stored.
 		struct pfring_pkthdr *hdr,
-		u_int8_t wait_for_incoming_packet) {
+		u_int8_t wait_for_incoming_packet) {// If 0 we simply check the packet availability, otherwise the call is blocked until a packet is available.
 #ifdef HAVE_PF_RING_FT
   pfring_ft_ext_pkthdr ext_hdr = { 0 };
 #endif
@@ -619,7 +619,7 @@ recv_next:
 #endif
 
     if (unlikely(rc > 0 && ring->reflector_socket != NULL))
-        pfring_send(ring->reflector_socket, (char *) *buffer, hdr->caplen, 0 /* flush */);
+        pfring_send(ring->reflector_socket, (char *) *buffer, hdr->caplen, 0 /* flush */); // -d 选项，将从网卡收上来的包发到另一个网络接口
 
     return rc;
   }

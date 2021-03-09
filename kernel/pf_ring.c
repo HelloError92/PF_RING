@@ -2045,12 +2045,12 @@ static inline u_int32_t hash_pkt_header(struct pfring_pkthdr *hdr, u_int32_t fla
 }
 
 /* ******************************************************* */
-
+// 从原始报文数据中提交各层协议的信息，填充到入参　pfring_pkthdr *hdr　中。
 static int parse_raw_pkt(u_char *data, u_int data_len,
 			 struct pfring_pkthdr *hdr,
 			 u_int16_t *ip_id)
 {
-  struct ethhdr *eh = (struct ethhdr *)data;
+  struct ethhdr *eh = (struct ethhdr *)data;  // 链路层头
   u_int16_t displ = sizeof(struct ethhdr), ip_len, fragment_offset = 0, tunnel_offset = 0;
 
   memset(&hdr->extended_hdr.parsed_pkt, 0, sizeof(hdr->extended_hdr.parsed_pkt));
@@ -2124,7 +2124,7 @@ static int parse_raw_pkt(u_char *data, u_int data_len,
       return(0);
     }
   }
-
+// 网络层
   hdr->extended_hdr.parsed_pkt.offset.l3_offset = displ;
 
   if(hdr->extended_hdr.parsed_pkt.eth_type == ETH_P_IP /* IPv4 */) {
@@ -2209,7 +2209,7 @@ static int parse_raw_pkt(u_char *data, u_int data_len,
 
   if (ip_len == 0)
     return(0); /* Bogus IP */
-
+// 传输层
   hdr->extended_hdr.parsed_pkt.offset.l4_offset = hdr->extended_hdr.parsed_pkt.offset.l3_offset+ip_len;
 
   if(!fragment_offset) {
@@ -3683,7 +3683,7 @@ u_int32_t default_rehash_rss_func(struct sk_buff *skb, struct pfring_pkthdr *hdr
 
 /*
  * Add the specified skb to the ring so that userland apps
- * can use the packet.
+ * can use the packet.  加入到ring中的，用户app可读
  *
  * Return code:
  *  0 packet successully processed but no room in the ring
@@ -3721,8 +3721,8 @@ static int add_skb_to_ring(struct sk_buff *skb,
   atomic_inc(&pfr->num_ring_users);
 
   /* [1] BPF Filtering */
-  if(pfr->bpfFilter) {
-    if(bpf_filter_skb(skb, pfr, displ) == 0) {
+  if(pfr->bpfFilter) {      // BPF 过滤
+    if(bpf_filter_skb(skb, pfr, displ) == 0) {// BPF 过滤函数
       atomic_dec(&pfr->num_ring_users);
       return(-1);
     }
@@ -3733,7 +3733,7 @@ static int add_skb_to_ring(struct sk_buff *skb,
 
   /* ************************** */
 
-  /* [2] Filter packet according to rules */
+  /* [2] Filter packet according to rules 规则过滤 */
 
   debug_printk(2, "ring_id=%d pfr->filtering_sample_rate=%u pfr->filtering_sampling_size=%u\n",
     pfr->ring_id, pfr->filtering_sample_rate, pfr->filtering_sampling_size);
@@ -3804,7 +3804,7 @@ static int add_skb_to_ring(struct sk_buff *skb,
 
       offset = 0;
 
-      rc = add_pkt_to_ring(skb, real_skb, pfr, hdr, displ, channel_id, offset);
+      rc = add_pkt_to_ring(skb, real_skb, pfr, hdr, displ, channel_id, offset); // 确实要发给用户的包
     }
   }
 
@@ -3912,7 +3912,7 @@ static inline int is_stack_injected_skb(struct sk_buff *skb)
 }
 
 /* ********************************** */
-
+// IP 分片处理函数
 static struct sk_buff* defrag_skb(struct sk_buff *skb,
 				  u_int16_t displ,
 				  struct pfring_pkthdr *hdr,
@@ -4152,12 +4152,12 @@ int pf_ring_skb_ring_handler(struct sk_buff *skb,
   } else {
     is_ip_pkt = parse_pkt(skb, real_skb, displ, &hdr, &ip_id);
 
-    if(enable_ip_defrag) {
+    if(enable_ip_defrag) { // 处理IP分片
       if(real_skb
 	 && is_ip_pkt
 	 && recv_packet) {
 
-        skb = skk = defrag_skb(skb, displ, &hdr, &defragmented_skb);
+        skb = skk = defrag_skb(skb, displ, &hdr, &defragmented_skb); // IP 分片处理函数
 
         if(skb == NULL)
           return(0);
@@ -4203,7 +4203,7 @@ int pf_ring_skb_ring_handler(struct sk_buff *skb,
 	/* We've found the ring where the packet can be stored */
 	int old_len = hdr.len, old_caplen = hdr.caplen;  /* Keep old lenght */
 
-	room_available |= add_skb_to_ring(skb, real_skb, pfr, &hdr, is_ip_pkt,
+	room_available |= add_skb_to_ring(skb, real_skb, pfr, &hdr, is_ip_pkt, // 将报文插入环形缓冲区，会被用户空间应用进程读取到。
 					  displ, channel_id, num_rx_channels);
 
 	hdr.len = old_len, hdr.caplen = old_caplen;
@@ -4381,14 +4381,14 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 {
   int rc = 0;
 
-  if(skb->pkt_type != PACKET_LOOPBACK) 
+  if(skb->pkt_type != PACKET_LOOPBACK) // 过滤掉 loop 接口
     rc = pf_ring_skb_ring_handler(skb,
 			          skb->pkt_type != PACKET_OUTGOING,
 			          1 /* real_skb */,
 			          -1 /* unknown: any channel */,
                 	          UNKNOWN_NUM_RX_CHANNELS);
 
-  kfree_skb(skb);
+  kfree_skb(skb); // 减少一次引用计数
 
   return rc;
 }
@@ -4397,7 +4397,7 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 
 void register_device_handler(void)
 {
-  prot_hook.func = packet_rcv;
+  prot_hook.func = packet_rcv;//当报文从网卡发送到kernel时，此函数被netif_receive_skb回调
   prot_hook.type = htons(ETH_P_ALL);
   dev_add_pack(&prot_hook);
 }
@@ -4410,7 +4410,7 @@ void unregister_device_handler(void)
 }
 
 /* ********************************** */
-
+// 用户创建pr_fing socket时，调用此函数
 static int ring_create(struct net *net, struct socket *sock, int protocol
 #if((LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,33)) || ((LINUX_VERSION_CODE == KERNEL_VERSION(2,6,32)) && defined(REDHAT_PATCHED_KERNEL)))
 		       , int kern
@@ -4493,7 +4493,7 @@ static int ring_create(struct net *net, struct socket *sock, int protocol
 
   pfr->ring_pid = pid;
 
-  if(ring_insert(sk) == -1)
+  if(ring_insert(sk) == -1) // 创建的socket 加入到 ring_table 中
     goto free_pfr;
 
   ring_proc_add(pfr);
@@ -5487,7 +5487,7 @@ static int packet_ring_bind(struct sock *sk, char *dev_name)
     pfr->channel_id_mask = RING_ANY_CHANNEL;
 
     /* Time to rebind to a new device */
-    ring_proc_add(pfr);
+    ring_proc_add(pfr);  // 创建 proc 文件
   }
 
   pfr->last_bind_dev = dev;
@@ -5902,7 +5902,7 @@ unsigned int ring_poll(struct file *file,
   if(pfr->zc_dev == NULL) {
     /* PF_RING mode (No ZC) */
 
-    pfr->ring_active = 1;
+    pfr->ring_active = 1;   // 设备激活
 
     if(pfr->tx.enable_tx_with_bounce && pfr->header_len == long_pkt_header) {
       write_lock_bh(&pfr->tx.consume_tx_packets_lock);
@@ -5911,7 +5911,7 @@ unsigned int ring_poll(struct file *file,
     }
 
     if(num_queued_pkts(pfr) < pfr->poll_num_pkts_watermark /* || pfr->num_poll_calls == 1 */)
-      poll_wait(file, &pfr->ring_slots_waitqueue, wait);
+      poll_wait(file, &pfr->ring_slots_waitqueue, wait); // 无数据可读，请求插入到等待队列
 
     /* Flush the queue when watermark reached */
     if(num_queued_pkts(pfr) >= pfr->poll_num_pkts_watermark) {
@@ -5928,7 +5928,7 @@ unsigned int ring_poll(struct file *file,
         } else if( (jiffies_to_msecs(now - pfr->queue_nonempty_timestamp) >= (u_long)pfr->poll_watermark_timeout) ) {
             debug_printk(2, "[ring_id=%u] Flushing queue (num_queued_pkts=%llu, now=%lu, queue_nonempty_timestamp=%lu, diff=%u, pfr->poll_watermark_timeout=%u)\n",
                       pfr->ring_id, num_queued_pkts(pfr), now, pfr->queue_nonempty_timestamp, jiffies_to_msecs(now - pfr->queue_nonempty_timestamp), pfr->poll_watermark_timeout);
-            mask |= POLLIN | POLLRDNORM;
+            mask |= POLLIN | POLLRDNORM;  // 可读
             pfr->queue_nonempty_timestamp=0;
         }
       }
@@ -5956,7 +5956,7 @@ unsigned int ring_poll(struct file *file,
       debug_printk(2, "calling poll_wait()\n");
 
       /* No packet arrived yet */
-      poll_wait(file, pfr->zc_dev->packet_waitqueue, wait);
+      poll_wait(file, pfr->zc_dev->packet_waitqueue, wait); // 无包到达
 
       debug_printk(2, "poll_wait() just returned\n");
     } else {
@@ -5970,7 +5970,7 @@ unsigned int ring_poll(struct file *file,
 	     *pfr->zc_dev->interrupt_received);
 
     if(*pfr->zc_dev->interrupt_received) {
-      return(POLLIN | POLLRDNORM);
+      return(POLLIN | POLLRDNORM);  // 可读
     } else {
       return(0);
     }
@@ -6046,7 +6046,7 @@ static int remove_from_cluster(struct sock *sock, struct pf_ring_socket *pfr)
   cluster_ptr = (ring_cluster_element*)lockless_list_get_first(&ring_cluster_list, &last_list_idx);
 
   while(cluster_ptr != NULL) {
-    if(cluster_ptr->cluster.cluster_id == pfr->cluster_id) {
+    if(cluster_ptr->cluster.cluster_id == pfr->cluster_id) { // 从 cluster_id 对应的socket 数组中移除传入的sock
       int ret = remove_from_cluster_list(&cluster_ptr->cluster, sock);
 
       if(cluster_ptr->cluster.num_cluster_elements == 0) {
@@ -6112,7 +6112,7 @@ static int set_master_ring(struct sock *sock,
 }
 
 /* ************************************* */
-
+// 对于某个socket，将它放到clusterId指定的组，同一个流发到同一个socket
 static int add_sock_to_cluster(struct sock *sock,
 			       struct pf_ring_socket *pfr,
 			       struct add_to_cluster *cluster)
@@ -6131,11 +6131,12 @@ static int add_sock_to_cluster(struct sock *sock,
 
   write_lock(&ring_cluster_lock);
 
-  cluster_ptr = (ring_cluster_element*)lockless_list_get_first(&ring_cluster_list, &last_list_idx);
+  //从ring_cluster_list 中找到指定clusterId的socket list
+  cluster_ptr = (ring_cluster_element*)lockless_list_get_first(&ring_cluster_list, &last_list_idx); 
 
   while(cluster_ptr != NULL) {
-    if(cluster_ptr->cluster.cluster_id == cluster->clusterId) {
-      rc = add_sock_to_cluster_list(cluster_ptr, sock);
+    if(cluster_ptr->cluster.cluster_id == cluster->clusterId) { // 与设置的 clusterId 相同
+      rc = add_sock_to_cluster_list(cluster_ptr, sock);     // 增加sock 到 cluster_ptr->cluster->sk数组中
       write_unlock(&ring_cluster_lock);
       return(rc);
     }
@@ -8724,9 +8725,9 @@ static int __init ring_init(void)
   strcpy(none_device_element.device_name, "none");
   map_ifindex(none_dev.ifindex);
 
-  sock_register(&ring_family_ops);
+  sock_register(&ring_family_ops); // 注册 socket，用于内核态、用户态通信
   register_pernet_subsys(&ring_net_ops);
-  register_netdevice_notifier(&ring_netdev_notifier);
+  register_netdevice_notifier(&ring_netdev_notifier); // 注册设备通知函数，当网卡down、up时，回调 ring_netdev_notifier 函数。
 
   register_device_handler();
 
